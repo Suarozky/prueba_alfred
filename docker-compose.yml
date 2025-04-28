@@ -7,6 +7,7 @@ services:
     environment:
       - POSTGRES_USER=postgres # Nombre de usuario para la base de datos PostgreSQL.
       - POSTGRES_PASSWORD=postgres # Contraseña del usuario de la base de datos PostgreSQL.
+      - POSTGRES_DB=postgres # Nombre de la base de datos predeterminada
     ports:
       - "5432:5432" # Mapeo del puerto 5432 del contenedor al puerto 5432 del host.
     volumes:
@@ -21,6 +22,23 @@ services:
     environment:
       - PGADMIN_DEFAULT_EMAIL=backend@gmail.com # Correo electrónico predeterminado para la cuenta de administrador en pgAdmin.
       - PGADMIN_DEFAULT_PASSWORD=admin1234 # Contraseña predeterminada para la cuenta de administrador en pgAdmin.
+
+  web: # Definición del servicio para tu aplicación Django.
+    build: 
+      context: .  # Indica que Docker construya la imagen usando el Dockerfile en el directorio actual.
+    command: python manage.py runserver 0.0.0.0:8000  # Ejecutar Django en el puerto 8000.
+    volumes:
+      - .:/app  # Monta el directorio actual de tu máquina local en el contenedor, lo que permite cambios en vivo en el código.
+    ports:
+      - "8000:8000"  # Mapeo del puerto 8000 del contenedor al puerto 8000 del host.
+    depends_on:
+      - db  # Asegúrate de que PostgreSQL esté disponible antes de iniciar Django.
+    environment:
+      - DB_HOST=db  # Nombre del servicio de base de datos PostgreSQL.
+      - DB_PORT=5432
+      - DB_NAME=postgres
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
 
 volumes:
   db: # Definición de un volumen llamado "db".

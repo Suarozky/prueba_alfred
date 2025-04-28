@@ -8,15 +8,16 @@ from .serializers import TripSerializer
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError
 from drivers.service.nearest_driver import find_nearest_driver
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
-
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
-from .models import Drivers
-from .serializers import TripSerializer
-from drivers.service.nearest_driver import find_nearest_driver
+# Definir el parámetro Authorization una sola vez
+token_param = openapi.Parameter(
+    'Authorization',
+    openapi.IN_HEADER,
+    description="Token JWT Bearer. Formato: Bearer <token>",
+    type=openapi.TYPE_STRING
+)
 
 
 class TripCreateView(APIView):
@@ -25,6 +26,11 @@ class TripCreateView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        manual_parameters=[token_param],
+        request_body=TripSerializer,
+        responses={201: TripSerializer}
+    )
     def post(self, request):
         data = request.data.copy()
         user = request.user
@@ -35,12 +41,10 @@ class TripCreateView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        # Verificar si se proporcionó un ID de conductor específico
         driver_id = data.get('driver')
         driver_info = None
 
         if driver_id:
-            # Si el usuario especificó un conductor, intentamos usarlo
             try:
                 driver = Drivers.objects.get(id=driver_id)
             except Drivers.DoesNotExist:
@@ -49,7 +53,6 @@ class TripCreateView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
         else:
-            # Si no se especificó un conductor, buscar el más cercano usando la función existente
             driver_info = find_nearest_driver(user)
 
             if not driver_info:
@@ -58,7 +61,6 @@ class TripCreateView(APIView):
                     status=status.HTTP_404_NOT_FOUND
                 )
 
-            # Obtener el objeto conductor a partir de la información encontrada
             driver_id = driver_info["driver"]["id"]
             try:
                 driver = Drivers.objects.get(id=driver_id)
@@ -68,24 +70,18 @@ class TripCreateView(APIView):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-        # Completar los datos del viaje
         data['user'] = user.id
         data['driver'] = driver.id
-        data['status'] = 'in_progress'  # Asignar estado por defecto
+        data['status'] = 'in_progress'
 
-        # Si encontramos el conductor mediante la búsqueda, usamos los datos calculados
         if driver_info:
             data['estimated_arrival'] = driver_info["estimated_arrival"]
             data['distance_km'] = driver_info["distance_km"]
             data['price'] = driver_info["price"]
         else:
-            # Si el usuario eligió un conductor específico, intentamos obtener los detalles calculándolos
-            # O usando los datos preexistentes del conductor
-            data['estimated_arrival'] = getattr(
-                driver, 'estimated_arrival', 15)  # 15 min por defecto
-            data['distance_km'] = getattr(
-                driver, 'distance_km', 5.0)  # 5 km por defecto
-            data['price'] = getattr(driver, 'price', 20.0)  # $20 por defecto
+            data['estimated_arrival'] = getattr(driver, 'estimated_arrival', 15)
+            data['distance_km'] = getattr(driver, 'distance_km', 5.0)
+            data['price'] = getattr(driver, 'price', 20.0)
 
         serializer = TripSerializer(data=data)
         if serializer.is_valid():
@@ -100,6 +96,10 @@ class TripListView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        manual_parameters=[token_param],
+        responses={200: TripSerializer(many=True)}
+    )
     def get(self, request):
         trips = Trip.objects.all()
         serializer = TripSerializer(trips, many=True)
@@ -112,6 +112,18 @@ class TripRetrieveView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        manual_parameters=[
+            token_param,
+            openapi.Parameter(
+                'trip_id',
+                openapi.IN_PATH,
+                description="ID del viaje a recuperar",
+                type=openapi.TYPE_STRING
+            )
+        ],
+        responses={200: TripSerializer, 404: 'Trip not found'}
+    )
     def get(self, request, trip_id):
         try:
             trip = Trip.objects.get(id=trip_id)
@@ -130,6 +142,28 @@ class TripStatusUpdateView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        manual_parameters=[
+            token_param,
+            openapi.Parameter(
+                'driverId',
+                openapi.IN_PATH,
+                description="ID del conductor que tiene el viaje en progreso",
+                type=openapi.TYPE_STRING
+            )
+        ],
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'status': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Nuevo estado: 'completed' o 'cancelled'",
+                    enum=['completed', 'cancelled']
+                )
+            }
+        ),
+        responses={200: TripSerializer, 404: 'No trip found for driver'}
+    )
     def patch(self, request, driverId):
         new_status = request.data.get('status', 'COMPLETED')
 
@@ -139,8 +173,7 @@ class TripStatusUpdateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        trips = Trip.objects.filter(
-            driver=driverId, status='in_progress').first()
+        trips = Trip.objects.filter(driver=driverId, status='in_progress').first()
 
         if trips:
             trips.status = new_status

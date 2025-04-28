@@ -1,7 +1,6 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-# ¡Te faltaba importar authenticate!
 from django.contrib.auth import authenticate
 from .models import User
 from .serializers import UserSerializer
@@ -11,24 +10,44 @@ from rest_framework.permissions import IsAuthenticated
 
 
 class UserList(APIView):
-    def get(self, request):  # Faltaba el parámetro 'request'
+    """
+    View para listar todos los usuarios
+    """
+
+    def get(self, request):
+        """
+        Método GET para obtener todos los usuarios
+        """
         users = User.objects.all()
         serializer = UserSerializer(users, many=True)
         return Response(serializer.data)
 
 
 class UserById(APIView):
+    """
+    View para obtener el perfil del usuario autenticado
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        user = request.user  # Esto SÍ es el objeto User completo
+        """
+        Método GET para obtener los datos del usuario actual
+        """
+        user = request.user
         serializer = UserSerializer(user)
         return Response(serializer.data)
 
 
 class UpdateUser(APIView):
-    permission_classes = [IsAuthenticated]  
+    """
+    View para actualizar un usuario específico
+    """
+    permission_classes = [IsAuthenticated]
+
     def put(self, request, pk):
+        """
+        Método PUT para actualizar los datos de un usuario por pk
+        """
         try:
             user = User.objects.get(pk=pk)
             serializer = UserSerializer(user, data=request.data)
@@ -41,8 +60,15 @@ class UpdateUser(APIView):
 
 
 class DeleteUser(APIView):
-    permission_classes = [IsAuthenticated]  
+    """
+    View para eliminar un usuario específico
+    """
+    permission_classes = [IsAuthenticated]
+
     def delete(self, request, pk):
+        """
+        Método DELETE para eliminar un usuario por pk
+        """
         try:
             user = User.objects.get(pk=pk)
             user.delete()
@@ -52,24 +78,34 @@ class DeleteUser(APIView):
 
 
 class RegisterView(APIView):
+    """
+    View para registrar un nuevo usuario
+    """
+
     def post(self, request):
+        """
+        Método POST para crear un nuevo usuario y asignarle un token
+        """
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-
-      
             token = Token.objects.create(user=user)
-
             return Response(
                 {"message": "Usuario creado exitosamente", "user": serializer.data, "token": token.key},
                 status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    
-    
+
+
 class LoginView(APIView):
+    """
+    View para iniciar sesión de un usuario
+    """
+
     def post(self, request):
+        """
+        Método POST para autenticar un usuario y generar un nuevo token
+        """
         email = request.data.get('email')
         password = request.data.get('password')
 
@@ -93,7 +129,7 @@ class LoginView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        Token.objects.filter(user=user).delete()  
+        Token.objects.filter(user=user).delete()  # Elimina token viejo para regenerar uno nuevo
         token = Token.objects.create(user=user)
 
         return Response(
