@@ -1,24 +1,4 @@
-# Usa una imagen ligera de Python
-FROM python:3.11-slim
 
-# Establece el directorio de trabajo dentro del contenedor
-WORKDIR /app
-
-# Copia el archivo de dependencias
-COPY requirements.txt .
-
-# Instala las dependencias de Python
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copia todo el proyecto Django al contenedor
-COPY . .
-
-# Expone el puerto de Django
-EXPOSE 8000
-
-# Corre el servidor de desarrollo
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
-# Usar la imagen oficial de Python
 FROM python:3.11-slim
 
 # Definir el directorio de trabajo
